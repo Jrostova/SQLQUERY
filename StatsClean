@@ -1,0 +1,19 @@
+DECLARE @sql NVARCHAR(MAX) = N'';
+
+;WITH HotTables AS
+(
+    SELECT DISTINCT
+        OBJECT_SCHEMA_NAME(s.object_id) AS SchemaName,
+        OBJECT_NAME(s.object_id)        AS TableName
+    FROM sys.stats AS s
+    CROSS APPLY sys.dm_db_stats_properties(s.object_id, s.stats_id) AS sp
+    WHERE sp.modification_counter IS NOT NULL
+      AND sp.rows >= 10000                      -- ignore tiny tables
+      AND 100.0 * sp.modification_counter / NULLIF(sp.rows, 0) >= 5 -- >= 5% modified
+)
+SELECT @sql = @sql +
+    'UPDATE STATISTICS ' + QUOTENAME(SchemaName) + '.' + QUOTENAME(TableName) + ' WITH FULLSCAN;' + CHAR(10)
+FROM HotTables;
+
+PRINT @sql;             -- review first
+--EXEC sp_executesql @sql;  -- uncomment to run
